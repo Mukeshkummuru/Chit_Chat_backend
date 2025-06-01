@@ -48,36 +48,108 @@ async def websocket_endpoint(
         while True:
             data = await websocket.receive_text()
             print(f"Received data: {data}")
-            message = json.loads(data)
-            receiver = message.get("to")
-            msg_obj = {
-                "from": phone_number,
-                "to": receiver,
-                "message": message.get("message"),
-                "time": datetime.now(timezone.utc).isoformat()     
+            message_data = json.loads(data)
+            
+            # Handle different message types
+            if message_data.get("type") == "message":
+                receiver = message_data.get("to")
+                message_id = f"{phone_number}_{receiver}_{datetime.now(timezone.utc).timestamp()}"
                 
-            }
-            print(f"Saving chat: {msg_obj}")
-            chats_collection.insert_one(msg_obj)
-
-            sender = db["users"].find_one({"phone_number": phone_number})
-            send_fcm_notification(
-                to_phone=receiver,
-                sender_username=sender["username"] if sender else phone_number,
-                message_text=message.get("message")
-            )
-           
-            chat_meta_collection.update_one(
-                {"user": receiver, "friend": phone_number},
-                {"$inc": {"unread": 1}},
-                upsert=True
-            )
-            # Relay to receiver if online
-            if receiver in active_connections:
-                await active_connections[receiver].send_text(json.dumps({
+                msg_obj = {
+                    "_id": message_id,
                     "from": phone_number,
-                    "message": message.get("message")
-                }))
+                    "to": receiver,
+                    "message": message_data.get("message"),
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "status": "sent",  # NEW: Message status
+                    "delivered_at": None,
+                    "read_at": None
+                }
+                print(f"Saving chat: {msg_obj}")
+                chats_collection.insert_one(msg_obj)
+
+                sender = db["users"].find_one({"phone_number": phone_number})
+                send_fcm_notification(
+                    to_phone=receiver,
+                    sender_username=sender["username"] if sender else phone_number,
+                    message_text=message_data.get("message")
+                )
+               
+                chat_meta_collection.update_one(
+                    {"user": receiver, "friend": phone_number},
+                    {"$inc": {"unread": 1}},
+                    upsert=True
+                )
+                
+                # Send delivery receipt to sender
+                delivery_receipt = {
+                    "type": "delivery_receipt",
+                    "message_id": message_id,
+                    "status": "delivered" if receiver in active_connections else "sent"
+                }
+                await websocket.send_text(json.dumps(delivery_receipt))
+                
+                # Update message status to delivered if receiver is online
+                if receiver in active_connections:
+                    chats_collection.update_one(
+                        {"_id": message_id},
+                        {
+                            "$set": {
+                                "status": "delivered",
+                                "delivered_at": datetime.now(timezone.utc).isoformat()
+                            }
+                        }
+                    )
+                    
+                    # Relay to receiver if online
+                    await active_connections[receiver].send_text(json.dumps({
+                        "type": "message",
+                        "from": phone_number,
+                        "message": message_data.get("message"),
+                        "message_id": message_id,
+                        "time": msg_obj["time"]
+                    }))
+                    
+                    # Send updated delivery receipt
+                    delivery_receipt["status"] = "delivered"
+                    await websocket.send_text(json.dumps(delivery_receipt))
+            
+            # Handle read receipts
+            elif message_data.get("type") == "read_receipt":
+                message_id = message_data.get("message_id")
+                sender_phone = message_data.get("sender")
+                
+                # Update message status to read
+                chats_collection.update_one(
+                    {"_id": message_id},
+                    {
+                        "$set": {
+                            "status": "read",
+                            "read_at": datetime.now(timezone.utc).isoformat()
+                        }
+                    }
+                )
+                
+                # Send read receipt to sender if online
+                if sender_phone in active_connections:
+                    await active_connections[sender_phone].send_text(json.dumps({
+                        "type": "read_receipt",
+                        "message_id": message_id,
+                        "status": "read"
+                    }))
+            
+            # Handle typing indicators
+            elif message_data.get("type") == "typing":
+                receiver = message_data.get("to")
+                is_typing = message_data.get("is_typing", False)
+                
+                if receiver in active_connections:
+                    await active_connections[receiver].send_text(json.dumps({
+                        "type": "typing",
+                        "from": phone_number,
+                        "is_typing": is_typing
+                    }))
+                    
     except WebSocketDisconnect:
         set_user_offline(phone_number)
         print(f"WebSocket disconnected: {phone_number}")
@@ -91,7 +163,8 @@ async def get_chat_history(user1: str, user2: str):
             {"from": user1, "to": user2},
             {"from": user2, "to": user1}
         ]
-    }))
+    }).sort("time", 1))  # Sort by time ascending
+    
     for c in chats:
         c["_id"] = str(c["_id"])
     return chats
@@ -110,7 +183,8 @@ async def last_message(user: str, friend: str):
     return {
         "message": last["message"] if last else "",
         "unread": meta.get("unread", 0),
-        "time": last["time"] if last and "time" in last else ""
+        "time": last["time"] if last and "time" in last else "",
+        "status": last.get("status", "sent") if last else ""
     }
 
 # NEW: Endpoint to reset unread count when chat is opened
@@ -121,6 +195,34 @@ async def reset_unread(user: str, friend: str):
         {"$set": {"unread": 0}},
         upsert=True
     )
+    
+    # Mark all unread messages from friend as read
+    unread_messages = list(chats_collection.find({
+        "from": friend,
+        "to": user,
+        "status": {"$ne": "read"}
+    }))
+    
+    # Update messages to read status
+    chats_collection.update_many(
+        {"from": friend, "to": user, "status": {"$ne": "read"}},
+        {
+            "$set": {
+                "status": "read",
+                "read_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    # Send read receipts for all unread messages
+    if friend in active_connections:
+        for msg in unread_messages:
+            await active_connections[friend].send_text(json.dumps({
+                "type": "read_receipt",
+                "message_id": str(msg["_id"]),
+                "status": "read"
+            }))
+    
     return {"message": "Unread count reset"}
 
 @router.delete("/delete_chat/{user}/{friend}")
