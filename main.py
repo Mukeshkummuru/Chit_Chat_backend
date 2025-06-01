@@ -12,6 +12,10 @@ async def log_requests(request, call_next):
     print(f"Request: {request.method} {request.url}")
     response = await call_next(request)
     return response
+
+@app.get("/")
+def read_root():
+    return {"message": "Chit Chat API is running!"}
     
 app.add_middleware(
     CORSMiddleware,
