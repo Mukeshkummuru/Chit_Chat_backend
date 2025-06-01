@@ -3,9 +3,9 @@ from firebase_admin import credentials, storage
 import uuid
 import os
 
-cred = credentials.Certificate("/etc/secrets/firebase_admin_sdk.json")
+cred_path = os.getenv("FIREBASE_ADMIN_SDK_PATH", "/etc/secrets/firebase_admin_sdk.json")
+cred = credentials.Certificate(cred_path)
 
-# Only initialize if not already initialized
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred, {
         "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET")
