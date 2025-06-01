@@ -3,7 +3,7 @@ from firebase_admin import credentials, storage
 import uuid
 import os
 
-cred = credentials.Certificate("firebase_admin_sdk.json")
+cred = credentials.Certificate("/etc/secrets/firebase_admin_sdk.json")
 
 # Only initialize if not already initialized
 if not firebase_admin._apps:
