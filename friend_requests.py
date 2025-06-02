@@ -84,6 +84,9 @@ async def all_users_and_friends(user: dict = Depends(get_current_user)):
     all_users = list(users_collection.find({"phone_number": {"$ne": my_phone}}))
     friends = user.get("friends", [])
     pending_requests = list(friend_requests_collection.find({"to": my_phone, "status": "pending"}))
+    # Convert ObjectId to str for pending_requests
+    for req in pending_requests:
+        req["_id"] = str(req["_id"])
     return {
         "users": [
             {
