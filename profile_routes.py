@@ -3,8 +3,38 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from models import update_user_profile, get_current_user, users_collection, is_user_online
 from firebase_utils import upload_image_to_firebase
 from schema import ProfileUpdateResponse, UserResponse
+from models import chats_collection
 
 router = APIRouter()
+
+@router.get("/friends_summary/")
+async def friends_summary(user: dict = Depends(get_current_user)):
+    my_phone = user["phone_number"]
+    user_doc = users_collection.find_one({"phone_number": my_phone})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    friends = user_doc.get("friends", [])
+    result = []
+    for friend in friends:
+        friend_user = users_collection.find_one({"phone_number": friend}) or {}
+        last_msg = chats_collection.find_one(
+            {"$or": [
+                {"from": my_phone, "to": friend},
+                {"from": friend, "to": my_phone}
+            ]},
+            sort=[("time", -1)]
+        )
+        result.append({
+            "phone_number": friend,
+            "username": friend_user.get("username", ""),
+            "profile_image_url": friend_user.get("profile_image_url", ""),
+            "bio": friend_user.get("bio", ""),
+            "email": friend_user.get("email", ""),
+            "last_message": last_msg["message"] if last_msg else "",
+            "last_message_time": last_msg["time"] if last_msg else "",
+            "last_message_status": last_msg["status"] if last_msg else "",
+        })
+    return result
 
 @router.post("/update/", response_model=ProfileUpdateResponse)
 async def update_profile(
@@ -58,7 +88,7 @@ async def get_my_profile(user: dict = Depends(get_current_user)):
     user.setdefault("friends", [])  # <-- Add this line
     return user
 
-@router.get("/user/{phone_number}/")
+""" @router.get("/user/{phone_number}/")
 async def get_user_by_phone(phone_number: str):
     user = users_collection.find_one({"phone_number": phone_number})
     if not user:
@@ -68,7 +98,7 @@ async def get_user_by_phone(phone_number: str):
     user.setdefault("bio", "")
     user.setdefault("profile_image_url", "")
     user.setdefault("username", "")
-    return user
+    return user """
 
 @router.get("/online_status/{phone_number}")
 async def online_status(phone_number: str):

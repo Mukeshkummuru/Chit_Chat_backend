@@ -76,3 +76,23 @@ async def unfriend(friend_phone: str, user: dict = Depends(get_current_user)):
     )
     print(f"Update results: {result1.modified_count}, {result2.modified_count}")
     return {"message": "Unfriended"}
+
+# Add to your backend (e.g., friends_routes.py)
+@router.get("/all_users_and_friends/")
+async def all_users_and_friends(user: dict = Depends(get_current_user)):
+    my_phone = user["phone_number"]
+    all_users = list(users_collection.find({"phone_number": {"$ne": my_phone}}))
+    friends = user.get("friends", [])
+    pending_requests = list(friend_requests_collection.find({"to": my_phone, "status": "pending"}))
+    return {
+        "users": [
+            {
+                "phone_number": u["phone_number"],
+                "username": u.get("username", ""),
+                "profile_image_url": u.get("profile_image_url", ""),
+                "bio": u.get("bio", ""),
+            } for u in all_users
+        ],
+        "friends": friends,
+        "pending_requests": pending_requests,
+    }

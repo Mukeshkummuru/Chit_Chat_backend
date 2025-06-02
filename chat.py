@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from typing import Dict
+from typing import Dict, Optional
 import json
 from models import db
 from jose import jwt, JWTError
 from fcm_utils import send_fcm_notification
-from models import set_user_online, set_user_offline
+from models import set_user_online, set_user_offline,chats_collection
 
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
@@ -156,20 +156,31 @@ async def websocket_endpoint(
 
 # Add a REST endpoint to fetch chat history
 @router.get("/history/{user1}/{user2}")
-async def get_chat_history(user1: str, user2: str):
-    chats = list(chats_collection.find({
+async def get_chat_history(
+    user1: str,
+    user2: str,
+    limit: int = Query(50, ge=1, le=100),
+    before: Optional[str] = None  # ISO timestamp or ObjectId string
+):
+    query = {
         "$or": [
             {"from": user1, "to": user2},
             {"from": user2, "to": user1}
         ]
-    }).sort("time", 1))  # Sort by time ascending
+    }
+    if before:
+        query["time"] = {"$lt": before}
+    messages = list(
+        chats_collection.find(query)
+        .sort("time", -1)
+        .limit(limit)
+    )
+    messages.reverse()  # So the oldest is first
+    return messages
 
-    for c in chats:
-        c["_id"] = str(c["_id"])
-    return chats
+ 
 
-# NEW: Endpoint for last message and unread count
-@router.get("/last_message/{user}/{friend}")
+""" @router.get("/last_message/{user}/{friend}")
 async def last_message(user: str, friend: str):
     last = chats_collection.find_one(
         {"$or": [
@@ -184,9 +195,10 @@ async def last_message(user: str, friend: str):
         "unread": meta.get("unread", 0),
         "time": last["time"] if last and "time" in last else "",
         "status": last.get("status", "sent") if last else ""
-    }
+    } """
 
-# NEW: Endpoint to reset unread count when chat is opened
+ 
+ 
 @router.post("/reset_unread/{user}/{friend}")
 async def reset_unread(user: str, friend: str):
     chat_meta_collection.update_one(
