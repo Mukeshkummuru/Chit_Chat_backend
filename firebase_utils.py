@@ -2,8 +2,18 @@ import firebase_admin
 from firebase_admin import credentials, storage
 import uuid
 import os
+import json
 
-cred_path = os.getenv("FIREBASE_ADMIN_SDK_PATH", "/etc/secrets/firebase_admin_sdk.json")
+# Write the JSON string from environment to a temp file
+cred_path = "/tmp/firebase_admin_sdk.json"
+firebase_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+
+# Create the file only if it doesn't already exist
+if firebase_json and not os.path.exists(cred_path):
+    with open(cred_path, "w") as f:
+        f.write(firebase_json)
+
+# Initialize Firebase app
 cred = credentials.Certificate(cred_path)
 
 if not firebase_admin._apps:
