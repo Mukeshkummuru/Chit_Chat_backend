@@ -84,9 +84,16 @@ async def all_users_and_friends(user: dict = Depends(get_current_user)):
     all_users = list(users_collection.find({"phone_number": {"$ne": my_phone}}))
     friends = user.get("friends", [])
     pending_requests = list(friend_requests_collection.find({"to": my_phone, "status": "pending"}))
-    # Convert ObjectId to str for pending_requests
+    # Build pending_requests with user info
+    pending_requests_with_user = []
     for req in pending_requests:
-        req["_id"] = str(req["_id"])
+        from_user = users_collection.find_one({"phone_number": req["from"]}) or {}
+        pending_requests_with_user.append({
+            "phone_number": req["from"],
+            "username": from_user.get("username", ""),
+            "bio": from_user.get("bio", ""),
+            "profile_image_url": from_user.get("profile_image_url", ""),
+        })
     return {
         "users": [
             {
@@ -97,5 +104,5 @@ async def all_users_and_friends(user: dict = Depends(get_current_user)):
             } for u in all_users
         ],
         "friends": friends,
-        "pending_requests": pending_requests,
+        "pending_requests": pending_requests_with_user,
     }
