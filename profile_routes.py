@@ -24,6 +24,13 @@ async def friends_summary(user: dict = Depends(get_current_user)):
             ]},
             sort=[("time", -1)]
         )
+
+        unread_count = chats_collection.count_documents({
+        "from": friend,
+        "to": my_phone,
+        "status": "delivered"
+        })
+
         result.append({
             "phone_number": friend,
             "username": friend_user.get("username", ""),
@@ -33,6 +40,7 @@ async def friends_summary(user: dict = Depends(get_current_user)):
             "last_message": last_msg["message"] if last_msg else "",
             "last_message_time": last_msg["time"] if last_msg else "",
             "last_message_status": last_msg["status"] if last_msg else "",
+            "unread": unread_count,
         })
     return result
 
