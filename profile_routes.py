@@ -28,7 +28,7 @@ async def friends_summary(user: dict = Depends(get_current_user)):
         unread_count = chats_collection.count_documents({
         "from": friend,
         "to": my_phone,
-        "status": "delivered"
+        "status": {"$in": ["sent", "delivered"]}
         })
 
         result.append({
