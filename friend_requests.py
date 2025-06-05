@@ -94,6 +94,10 @@ async def all_users_and_friends(user: dict = Depends(get_current_user)):
             "bio": from_user.get("bio", ""),
             "profile_image_url": from_user.get("profile_image_url", ""),
         })
+  
+    sent_requests = list(friend_requests_collection.find({"from": my_phone, "status": "pending"}))
+    sent_requests_phones = [req["to"] for req in sent_requests]
+    
     return {
         "users": [
             {
@@ -105,4 +109,5 @@ async def all_users_and_friends(user: dict = Depends(get_current_user)):
         ],
         "friends": friends,
         "pending_requests": pending_requests_with_user,
+        "sent_requests": sent_requests_phones,  
     }
