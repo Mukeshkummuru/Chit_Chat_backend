@@ -17,21 +17,35 @@ chats_collection = db["chats"]
 chat_meta_collection = db["chat_meta"]
 
 async def send_unread_update(user_phone):
-    """Send unread counts for all friends of user_phone via WebSocket if online."""
     user_doc = db["users"].find_one({"phone_number": user_phone})
     if not user_doc:
         return
     friends = user_doc.get("friends", [])
-    unread_counts = {}
+    summary = {}
     for friend in friends:
         meta = chat_meta_collection.find_one({"user": user_phone, "friend": friend}) or {}
-        unread_counts[friend] = meta.get("unread", 0)
+        unread = meta.get("unread", 0)
+        # Get last message and time
+        last_msg_doc = chats_collection.find_one(
+            {"$or": [
+                {"from": user_phone, "to": friend},
+                {"from": friend, "to": user_phone}
+            ]},
+            sort=[("time", -1)]
+        )
+        last_message = last_msg_doc["message"] if last_msg_doc else ""
+        last_message_time = last_msg_doc["time"] if last_msg_doc else ""
+        summary[friend] = {
+            "unread": unread,
+            "last_message": last_message,
+            "last_message_time": last_message_time
+        }
     if user_phone in active_connections:
         await active_connections[user_phone].send_text(json.dumps({
-            "type": "unread_update",
-            "unread_counts": unread_counts
+            "type": "friends_update",
+            "summary": summary
         }))
-
+        
 @router.websocket("/ws/{phone_number}")
 async def websocket_endpoint(
     websocket: WebSocket,
