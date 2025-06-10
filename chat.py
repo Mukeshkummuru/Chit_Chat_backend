@@ -5,7 +5,7 @@ import json
 from models import db
 from jose import jwt, JWTError
 from fcm_utils import send_fcm_notification
-from models import set_user_online, set_user_offline,chats_collection
+from models import set_user_online, set_user_offline, chats_collection
 
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
@@ -15,6 +15,22 @@ router = APIRouter()
 active_connections: Dict[str, WebSocket] = {}
 chats_collection = db["chats"]
 chat_meta_collection = db["chat_meta"]
+
+async def send_unread_update(user_phone):
+    """Send unread counts for all friends of user_phone via WebSocket if online."""
+    user_doc = db["users"].find_one({"phone_number": user_phone})
+    if not user_doc:
+        return
+    friends = user_doc.get("friends", [])
+    unread_counts = {}
+    for friend in friends:
+        meta = chat_meta_collection.find_one({"user": user_phone, "friend": friend}) or {}
+        unread_counts[friend] = meta.get("unread", 0)
+    if user_phone in active_connections:
+        await active_connections[user_phone].send_text(json.dumps({
+            "type": "unread_update",
+            "unread_counts": unread_counts
+        }))
 
 @router.websocket("/ws/{phone_number}")
 async def websocket_endpoint(
@@ -77,6 +93,9 @@ async def websocket_endpoint(
                     {"$inc": {"unread": 1}},
                     upsert=True
                 )
+
+                # Send unread update to receiver
+                await send_unread_update(receiver)
 
                 if receiver in active_connections:
                     # Update message status to delivered
@@ -178,27 +197,6 @@ async def get_chat_history(
     messages.reverse()  # So the oldest is first
     return messages
 
- 
-
-""" @router.get("/last_message/{user}/{friend}")
-async def last_message(user: str, friend: str):
-    last = chats_collection.find_one(
-        {"$or": [
-            {"from": user, "to": friend},
-            {"from": friend, "to": user}
-        ]},
-        sort=[("_id", -1)]
-    )
-    meta = chat_meta_collection.find_one({"user": user, "friend": friend}) or {}
-    return {
-        "message": last["message"] if last else "",
-        "unread": meta.get("unread", 0),
-        "time": last["time"] if last and "time" in last else "",
-        "status": last.get("status", "sent") if last else ""
-    } """
-
- 
- 
 @router.post("/reset_unread/{user}/{friend}")
 async def reset_unread(user: str, friend: str):
     chat_meta_collection.update_one(
@@ -233,6 +231,11 @@ async def reset_unread(user: str, friend: str):
                 "message_id": str(msg["_id"]),
                 "status": "read"
             }))
+
+    # Send unread update to user (the one who just read)
+    await send_unread_update(user)
+    # Optionally, also notify the friend
+    await send_unread_update(friend)
 
     return {"message": "Unread count reset"}
 
