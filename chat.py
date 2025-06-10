@@ -45,7 +45,7 @@ async def send_unread_update(user_phone):
             "type": "friends_update",
             "summary": summary
         }))
-        
+
 @router.websocket("/ws/{phone_number}")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -80,6 +80,7 @@ async def websocket_endpoint(
             # Handle different message types
             if message_data.get("type") == "message":
                 receiver = message_data.get("to")
+                client_temp_id = message_data.get("client_temp_id")
                 message_id = f"{phone_number}_{receiver}_{datetime.now(timezone.utc).timestamp()}"
 
                 msg_obj = {
@@ -129,12 +130,14 @@ async def websocket_endpoint(
                         "message": message_data.get("message"),
                         "message_id": message_id,
                         "time": msg_obj["time"]
+                        "client_temp_id": client_temp_id
                     }))
                     # Send delivery receipt to sender (only once, after DB update)
                     delivery_receipt = {
                         "type": "delivery_receipt",
                         "message_id": message_id,
                         "status": "delivered"
+                        "client_temp_id": client_temp_id 
                     }
                     await websocket.send_text(json.dumps(delivery_receipt))
                 else:
@@ -143,6 +146,7 @@ async def websocket_endpoint(
                         "type": "delivery_receipt",
                         "message_id": message_id,
                         "status": "sent"
+                        "client_temp_id": client_temp_id
                     }
                     await websocket.send_text(json.dumps(delivery_receipt))
 
