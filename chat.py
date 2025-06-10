@@ -129,14 +129,14 @@ async def websocket_endpoint(
                         "from": phone_number,
                         "message": message_data.get("message"),
                         "message_id": message_id,
-                        "time": msg_obj["time"]
+                        "time": msg_obj["time"],
                         "client_temp_id": client_temp_id
                     }))
                     # Send delivery receipt to sender (only once, after DB update)
                     delivery_receipt = {
                         "type": "delivery_receipt",
                         "message_id": message_id,
-                        "status": "delivered"
+                        "status": "delivered",
                         "client_temp_id": client_temp_id 
                     }
                     await websocket.send_text(json.dumps(delivery_receipt))
@@ -145,7 +145,7 @@ async def websocket_endpoint(
                     delivery_receipt = {
                         "type": "delivery_receipt",
                         "message_id": message_id,
-                        "status": "sent"
+                        "status": "sent",
                         "client_temp_id": client_temp_id
                     }
                     await websocket.send_text(json.dumps(delivery_receipt))
