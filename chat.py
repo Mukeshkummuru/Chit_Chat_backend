@@ -150,26 +150,28 @@ async def websocket_endpoint(
                         "message": message_data.get("message"),
                         "message_id": message_id,
                         "time": msg_obj["time"],
-                        "client_temp_id": client_temp_id                      
+                                             
                     }
                     await active_connections[receiver].send_text(json.dumps(receiver_message))
                     
-                    # Echo the message event to the sender (for real-time UI update)
-                    if phone_number in active_connections:
-                        await active_connections[phone_number].send_text(json.dumps(receiver_message))
-
-                    # Send updated delivery receipt to sender (delivered)
-                    delivered_receipt = {
-                        "type": "delivery_receipt",
-                        "message_id": message_id,
-                        "status": "delivered",
-                        "client_temp_id": client_temp_id
-                    }
-                    print(f"Sending delivered receipt to sender: {phone_number}")
-                    await websocket.send_text(json.dumps(delivered_receipt))
-
-                # Send unread update to receiver (if online)
-                await send_unread_update(receiver)
+                  delivered_receipt = {
+                    "type": "delivery_receipt",
+                    "message_id": message_id,
+                    "status": "delivered",
+                    "client_temp_id": client_temp_id
+                }
+                print(f"Sending delivered receipt to sender: {phone_number}")
+                await websocket.send_text(json.dumps(delivered_receipt))
+            else:
+                # Receiver is offline, send only "sent" receipt
+                sent_receipt = {
+                    "type": "delivery_receipt",
+                    "message_id": message_id,
+                    "status": "sent",
+                    "client_temp_id": client_temp_id
+                }
+                print(f"Sending sent receipt to sender: {phone_number}")
+                await websocket.send_text(json.dumps(sent_receipt))
 
             # Handle read receipts
             elif message_data.get("type") == "read_receipt":
