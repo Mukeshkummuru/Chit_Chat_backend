@@ -173,6 +173,10 @@ async def websocket_endpoint(
                     print(f"Sending sent receipt to sender: {phone_number}")
                     await websocket.send_text(json.dumps(sent_receipt))
 
+                # Send unread updates to both users
+                await send_unread_update(phone_number)  # sender
+                await send_unread_update(receiver)      # receiver
+
             # Handle read receipts
             elif message_data.get("type") == "read_receipt":
                 message_id = message_data.get("message_id")
