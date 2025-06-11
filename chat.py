@@ -127,13 +127,15 @@ async def websocket_endpoint(
                     )
                     
                     # Relay to receiver if online
-                    await active_connections[receiver].send_text(json.dumps({
+                    # Also echo the message event to the sender (for real-time UI update)
+                    await active_connections[phone_number].send_text(json.dumps({
                         "type": "message",
                         "from": phone_number,
                         "message": message_data.get("message"),
                         "message_id": message_id,
                         "time": msg_obj["time"],
-                        "to": receiver  # Add this for proper filtering
+                        "to": receiver,
+                        "client_temp_id": client_temp_id
                     }))
                     
                     # Send delivery receipt to sender AFTER DB update
