@@ -149,10 +149,15 @@ async def websocket_endpoint(
                         "to": receiver,
                         "message": message_data.get("message"),
                         "message_id": message_id,
-                        "time": msg_obj["time"]                       
+                        "time": msg_obj["time"],
+                        "client_temp_id": client_temp_id                      
                     }
                     await active_connections[receiver].send_text(json.dumps(receiver_message))
                     
+                    # Echo the message event to the sender (for real-time UI update)
+                    if phone_number in active_connections:
+                        await active_connections[phone_number].send_text(json.dumps(receiver_message))
+
                     # Send updated delivery receipt to sender (delivered)
                     delivered_receipt = {
                         "type": "delivery_receipt",
