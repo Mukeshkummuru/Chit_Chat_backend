@@ -154,24 +154,24 @@ async def websocket_endpoint(
                     }
                     await active_connections[receiver].send_text(json.dumps(receiver_message))
                     
-                  delivered_receipt = {
-                    "type": "delivery_receipt",
-                    "message_id": message_id,
-                    "status": "delivered",
-                    "client_temp_id": client_temp_id
-                }
-                print(f"Sending delivered receipt to sender: {phone_number}")
-                await websocket.send_text(json.dumps(delivered_receipt))
-            else:
-                # Receiver is offline, send only "sent" receipt
-                sent_receipt = {
-                    "type": "delivery_receipt",
-                    "message_id": message_id,
-                    "status": "sent",
-                    "client_temp_id": client_temp_id
-                }
-                print(f"Sending sent receipt to sender: {phone_number}")
-                await websocket.send_text(json.dumps(sent_receipt))
+                    delivered_receipt = {
+                        "type": "delivery_receipt",
+                        "message_id": message_id,
+                        "status": "delivered",
+                        "client_temp_id": client_temp_id
+                    }
+                    print(f"Sending delivered receipt to sender: {phone_number}")
+                    await websocket.send_text(json.dumps(delivered_receipt))
+                    else:
+                    # Receiver is offline, send only "sent" receipt
+                        sent_receipt = {
+                            "type": "delivery_receipt",
+                            "message_id": message_id,
+                            "status": "sent",
+                            "client_temp_id": client_temp_id
+                        }
+                        print(f"Sending sent receipt to sender: {phone_number}")
+                        await websocket.send_text(json.dumps(sent_receipt))
 
             # Handle read receipts
             elif message_data.get("type") == "read_receipt":
