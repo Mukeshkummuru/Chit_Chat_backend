@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from models import get_current_user, db
 from schema import UserResponse
- 
+
+# --- Add these imports ---
+import json
+from chat import active_connections  # Import your active_connections from chat.py
 
 router = APIRouter()
 
@@ -14,6 +17,33 @@ def ensure_user_fields(user):
     user.setdefault("bio", "")
     user.setdefault("profile_image_url", "")
     return user
+
+async def send_friends_update(phone_number):
+    if phone_number in active_connections:
+        await active_connections[phone_number].send_text(json.dumps({
+            "type": "friends_update_trigger"
+        }))
+
+# --- WebSocket push for pending requests ---
+async def send_pending_requests_update(phone_number):
+    user_doc = users_collection.find_one({"phone_number": phone_number})
+    if not user_doc:
+        return
+    pending_requests = list(friend_requests_collection.find({"to": phone_number, "status": "pending"}))
+    summary = {
+        "pending_count": len(pending_requests),
+        "pending_requests": [
+            {
+                "from": req["from"],
+                "status": req["status"]
+            } for req in pending_requests
+        ]
+    }
+    if phone_number in active_connections:
+        await active_connections[phone_number].send_text(json.dumps({
+            "type": "pending_requests_update",
+            "summary": summary
+        }))
 
 @router.get("/all_users/", response_model=list[UserResponse])
 async def get_all_users(user: dict = Depends(get_current_user)):
@@ -37,6 +67,8 @@ async def send_friend_request(to_phone: str, user: dict = Depends(get_current_us
         "to": to_phone,
         "status": "pending"
     })
+    # --- Push update to recipient ---
+    await send_pending_requests_update(to_phone)
     return {"message": "Friend request sent"}
 
 # Get pending requests for the current user
@@ -60,6 +92,9 @@ async def accept_friend_request(from_phone: str, user: dict = Depends(get_curren
     # Add each user to the other's friends list
     users_collection.update_one({"phone_number": from_phone}, {"$addToSet": {"friends": to_phone}})
     users_collection.update_one({"phone_number": to_phone}, {"$addToSet": {"friends": from_phone}})
+    # --- Push update to both users ---
+    await send_pending_requests_update(to_phone)
+    await send_pending_requests_update(from_phone)
     return {"message": "Friend request accepted"}
 
 @router.post("/unfriend/{friend_phone}/")
@@ -75,9 +110,14 @@ async def unfriend(friend_phone: str, user: dict = Depends(get_current_user)):
         {"$pull": {"friends": my_phone}}
     )
     print(f"Update results: {result1.modified_count}, {result2.modified_count}")
+    # --- Optionally push update if you want to update requests/friends in UI ---
+    await send_pending_requests_update(my_phone)
+    await send_pending_requests_update(friend_phone)
+    # --- Push friends update to both users ---
+    await send_friends_update(my_phone)
+    await send_friends_update(friend_phone)
     return {"message": "Unfriended"}
 
-# Add to your backend (e.g., friends_routes.py)
 @router.get("/all_users_and_friends/")
 async def all_users_and_friends(user: dict = Depends(get_current_user)):
     my_phone = user["phone_number"]
