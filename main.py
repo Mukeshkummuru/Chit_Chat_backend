@@ -7,11 +7,11 @@ from friend_requests import router as friend_requests_router
 
 app = FastAPI()
 
-@app.middleware("http")
+""" @app.middleware("http")
 async def log_requests(request, call_next):
     print(f"Request: {request.method} {request.url}")
     response = await call_next(request)
-    return response
+    return response """
 
 @app.get("/")
 def read_root():

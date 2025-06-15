@@ -105,6 +105,9 @@ async def accept_friend_request(from_phone: str, user: dict = Depends(get_curren
     # --- Push update to both users ---
     await send_pending_requests_update(to_phone)
     await send_pending_requests_update(from_phone)
+    # After updating friends lists and pending requests
+    await send_friends_update(to_phone)      # The user who accepted
+    await send_friends_update(from_phone)    # The user who sent the request
     return {"message": "Friend request accepted"}
 
 @router.post("/unfriend/{friend_phone}/")

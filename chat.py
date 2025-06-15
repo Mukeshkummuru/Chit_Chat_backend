@@ -16,6 +16,12 @@ active_connections: Dict[str, WebSocket] = {}
 chats_collection = db["chats"]
 chat_meta_collection = db["chat_meta"]
 
+async def send_friends_update(phone_number):
+    if phone_number in active_connections:
+        await active_connections[phone_number].send_text(json.dumps({
+            "type": "friends_update_trigger"
+        }))
+
 async def send_unread_update(user_phone):
     user_doc = db["users"].find_one({"phone_number": user_phone})
     if not user_doc:
@@ -52,7 +58,7 @@ async def websocket_endpoint(
     phone_number: str,
     token: str = Query(None)
 ):
-    print(f"WebSocket connect attempt: {phone_number}")
+     
     # JWT validation
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -211,9 +217,7 @@ async def websocket_endpoint(
             elif message_data.get("type") == "typing":
                 receiver = message_data.get("to")
                 is_typing = message_data.get("is_typing", False)
-
-                
-
+   
                 if receiver in active_connections:
                     typing_message = {
                         "type": "typing",
@@ -274,8 +278,6 @@ async def reset_unread(user: str, friend: str):
         "status": {"$in": ["sent", "delivered"]}  # Messages that haven't been read yet
     }))
 
-    
-
     # Update all unread messages to read status
     if unread_messages:
         message_ids = [msg["_id"] for msg in unread_messages]
@@ -323,6 +325,6 @@ async def delete_chat(user: str, friend: str):
             {"user": friend, "friend": user}
         ]
     })
-    
-    print(f"Deleted {delete_result.deleted_count} messages between {user} and {friend}")
+    await send_friends_update(user)
+    await send_friends_update(friend)
     return {"message": f"Chat deleted, {delete_result.deleted_count} messages removed"}
