@@ -19,15 +19,22 @@ def ensure_user_fields(user):
     return user
 
 async def send_friends_update(phone_number):
+    print(f"send_friends_update called for {phone_number}")
     if phone_number in active_connections:
+        print(f"Sending friends update to {phone_number} (connection found)")
         await active_connections[phone_number].send_text(json.dumps({
             "type": "friends_update_trigger"
         }))
+    else:
+        print(f"No active connection for {phone_number}")
+        
 
 # --- WebSocket push for pending requests ---
 async def send_pending_requests_update(phone_number):
+    print(f"send_pending_requests_update called for {phone_number}")
     user_doc = users_collection.find_one({"phone_number": phone_number})
     if not user_doc:
+        print(f"No user doc found for {phone_number}")
         return
     pending_requests = list(friend_requests_collection.find({"to": phone_number, "status": "pending"}))
     summary = {
@@ -40,10 +47,13 @@ async def send_pending_requests_update(phone_number):
         ]
     }
     if phone_number in active_connections:
+        print(f"Sending pending requests update to {phone_number} (connection found)")
         await active_connections[phone_number].send_text(json.dumps({
             "type": "pending_requests_update",
             "summary": summary
         }))
+    else:
+        print(f"No active connection for {phone_number}")
 
 @router.get("/all_users/", response_model=list[UserResponse])
 async def get_all_users(user: dict = Depends(get_current_user)):

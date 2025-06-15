@@ -52,14 +52,14 @@ async def websocket_endpoint(
     phone_number: str,
     token: str = Query(None)
 ):
-    print(f"WebSocket connect attempt: {phone_number} with token: {token}")
+    print(f"WebSocket connect attempt: {phone_number}")
     # JWT validation
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_phone = payload.get("sub")
-        print(f"Token subject: {user_phone}")
+       
         if user_phone != phone_number:
-            print("Token phone does not match path phone")
+          
             await websocket.close(code=1008)
             return
     except JWTError as e:
@@ -75,7 +75,7 @@ async def websocket_endpoint(
     try:
         while True:
             data = await websocket.receive_text()
-            print(f"Received data from {phone_number}: {data}")
+            
             message_data = json.loads(data)
 
             # Handle different message types
@@ -96,7 +96,7 @@ async def websocket_endpoint(
                     "read_at": None
                 }
                 
-                print(f"Saving chat message: {msg_obj}")
+             
                 chats_collection.insert_one(msg_obj)
 
                 # Send FCM notification
@@ -118,7 +118,7 @@ async def websocket_endpoint(
                 )
 
                 # CRITICAL FIX: Always send delivery receipt to sender first
-                print(f"Sending initial delivery receipt to sender: {phone_number}")
+               
                 initial_receipt = {
                     "type": "delivery_receipt",
                     "message_id": message_id,
@@ -129,7 +129,7 @@ async def websocket_endpoint(
 
                 # Check if receiver is online
                 if receiver in active_connections:
-                    print(f"Receiver {receiver} is online, updating status to delivered")
+                    
                     
                     # Update message status to delivered in database
                     chats_collection.update_one(
@@ -160,7 +160,7 @@ async def websocket_endpoint(
                         "status": "delivered",
                         "client_temp_id": client_temp_id
                     }
-                    print(f"Sending delivered receipt to sender: {phone_number}")
+                     
                     await websocket.send_text(json.dumps(delivered_receipt))
                 else:
                     # Receiver is offline, send only "sent" receipt
@@ -170,7 +170,7 @@ async def websocket_endpoint(
                         "status": "sent",
                         "client_temp_id": client_temp_id
                     }
-                    print(f"Sending sent receipt to sender: {phone_number}")
+                     
                     await websocket.send_text(json.dumps(sent_receipt))
 
                 # Send unread updates to both users
@@ -182,7 +182,7 @@ async def websocket_endpoint(
                 message_id = message_data.get("message_id")
                 sender_phone = message_data.get("sender")
 
-                print(f"Processing read receipt for message: {message_id} from {phone_number}")
+                 
 
                 # Update message status to read in database
                 update_result = chats_collection.update_one(
@@ -195,7 +195,7 @@ async def websocket_endpoint(
                     }
                 )
                 
-                print(f"Read receipt update result: modified {update_result.modified_count} documents")
+                
 
                 # Send read receipt back to original sender if they're online
                 if sender_phone in active_connections:
@@ -204,7 +204,7 @@ async def websocket_endpoint(
                         "message_id": message_id,
                         "status": "read"
                     }
-                    print(f"Sending read receipt to original sender: {sender_phone}")
+                     
                     await active_connections[sender_phone].send_text(json.dumps(read_receipt_response))
 
             # Handle typing indicators
@@ -212,7 +212,7 @@ async def websocket_endpoint(
                 receiver = message_data.get("to")
                 is_typing = message_data.get("is_typing", False)
 
-                print(f"Typing indicator: {phone_number} -> {receiver}, typing: {is_typing}")
+                
 
                 if receiver in active_connections:
                     typing_message = {
@@ -274,7 +274,7 @@ async def reset_unread(user: str, friend: str):
         "status": {"$in": ["sent", "delivered"]}  # Messages that haven't been read yet
     }))
 
-    print(f"Found {len(unread_messages)} unread messages to mark as read")
+    
 
     # Update all unread messages to read status
     if unread_messages:
@@ -288,8 +288,7 @@ async def reset_unread(user: str, friend: str):
                 }
             }
         )
-        print(f"Updated {update_result.modified_count} messages to read status")
-
+        
         # Send read receipts for all these messages if friend is online
         if friend in active_connections:
             for msg in unread_messages:
@@ -299,7 +298,7 @@ async def reset_unread(user: str, friend: str):
                     "status": "read"
                 }
                 await active_connections[friend].send_text(json.dumps(read_receipt))
-                print(f"Sent read receipt for message {msg['_id']} to {friend}")
+                
 
     # Send unread updates to both users
     await send_unread_update(user)
