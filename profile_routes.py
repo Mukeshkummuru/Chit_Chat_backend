@@ -4,6 +4,7 @@ from models import update_user_profile, get_current_user, users_collection, is_u
 from firebase_utils import upload_image_to_firebase
 from schema import ProfileUpdateResponse, UserResponse
 from models import chats_collection
+from fastapi import Body
 
 router = APIRouter()
 
@@ -96,17 +97,16 @@ async def get_my_profile(user: dict = Depends(get_current_user)):
     user.setdefault("friends", [])  # <-- Add this line
     return user
 
-""" @router.get("/user/{phone_number}/")
-async def get_user_by_phone(phone_number: str):
-    user = users_collection.find_one({"phone_number": phone_number})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user["_id"] = str(user["_id"])
-    user.setdefault("email", "")
-    user.setdefault("bio", "")
-    user.setdefault("profile_image_url", "")
-    user.setdefault("username", "")
-    return user """
+@router.post("/update_fcm_token/")
+async def update_fcm_token(
+    fcm_token: str = Body(..., embed=True),
+    user: dict = Depends(get_current_user)
+):
+    users_collection.update_one(
+        {"phone_number": user["phone_number"]},
+        {"$set": {"fcm_token": fcm_token}}
+    )
+    return {"message": "FCM token updated"}
 
 @router.get("/online_status/{phone_number}")
 async def online_status(phone_number: str):
