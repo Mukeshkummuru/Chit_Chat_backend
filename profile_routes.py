@@ -51,7 +51,7 @@ async def update_profile(
     bio: str = Form(...),
     image: UploadFile = File(None),
     email: str = Form(...),
-    user: dict = Depends(get_current_user),  # <-- Use JWT auth
+    user: dict = Depends(get_current_user),
 ):
     phone_number = user["phone_number"]
 
@@ -59,6 +59,8 @@ async def update_profile(
         "bio": bio,
         "email": email,
     }
+
+    username_changed = False  # <-- Add this flag
 
     last_change_str = user.get("last_username_change")
     if last_change_str:
@@ -69,10 +71,12 @@ async def update_profile(
         else:
             update_data["username"] = username
             update_data["last_username_change"] = datetime.now().isoformat()
+            username_changed = True  # <-- Set flag
     else:
         # If never changed before
         update_data["username"] = username
         update_data["last_username_change"] = datetime.now().isoformat()
+        username_changed = True  # <-- Set flag
 
     if image:
         content = await image.read()
@@ -85,8 +89,9 @@ async def update_profile(
 
     updated_user = update_user_profile(phone_number, update_data)
     return {
-        "message": "Profile updated successfully",
-        "user": updated_user
+        "message": "Profile updated successfully" if username_changed else "Username cannot be changed until 15 days",
+        "user": updated_user,
+        "username_changed": username_changed  # <-- Add this to response
     }
 
 @router.get("/me/", response_model=UserResponse)
